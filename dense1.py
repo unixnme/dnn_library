@@ -27,7 +27,7 @@ def generator(x, y):
     indices = np.arange(num_samples)
     while True:
         np.random.shuffle(indices)
-        for start in range(num_samples):
+        for start in range(0, num_samples, BATCH_SIZE):
             end = np.minimum(num_samples, start + BATCH_SIZE)
             elems = indices[start:end]
             yield x[elems], y[elems]
