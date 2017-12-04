@@ -28,7 +28,7 @@ def generator(x, y):
     indices = np.arange(num_samples)
     while True:
         np.random.shuffle(indices)
-        for start in range(num_samples):
+        for start in range(0, num_samples, BATCH_SIZE):
             end = np.minimum(num_samples, start + BATCH_SIZE)
             elems = indices[start:end]
             yield x[elems], y[elems]
@@ -39,7 +39,7 @@ train_gen = generator(x_train, y_train)
 
 def softmax(x):
     exp_x = np.exp(x)
-    return exp_x / np.sum(exp_x, axis=-1)
+    return exp_x / np.sum(exp_x, axis=-1, keepdims=True)
 
 def train_keras_model(model):
     model.compile(optimizer=SGD(lr=LR), loss=categorical_crossentropy, metrics=['accuracy'])
@@ -53,13 +53,15 @@ def train_numpy_model(model):
     for epoch in range(EPOCHS):
         cost = []
         accuracy = []
+        batches = []
         for batch in range(num_batches_per_epoch):
             x, z = next(train_gen)
+            batches.append(len(x))
             y = x.dot(w) + b
             s = softmax(y)
             cost.append(np.sum(-z*np.log(s)))
 
-            grad_y = y - z
+            grad_y = s - z
             grad_w = x.T.dot(grad_y)
             grad_b = np.sum(grad_y, axis=0, keepdims=True)
 
@@ -69,13 +71,27 @@ def train_numpy_model(model):
             w -= LR * grad_w
             b -= LR * grad_b
 
+        batches = np.float32(batches)
+        cost = np.array(cost)
         x, z = x_valid, y_valid
         y = x.dot(w) + b
-        d = y - z
-        val_cost = np.square(d).mean()
+        s = softmax(y)
+        val_cost = np.sum(-z*np.log(s), axis=-1).mean()
         val_acc = np.argmax(y, axis=-1) == np.argmax(z, axis=-1)
         val_acc = val_acc.astype(np.float32).mean()
-        print epoch, np.mean(cost), np.mean(accuracy), val_cost, val_acc
+        print epoch, np.sum(cost)/np.sum(batches), np.mean(accuracy), val_cost, val_acc
+
+    x, z = x_train, y_train
+    y = x.dot(w) + b
+    s = softmax(y)
+    cost = np.sum(-z * np.log(s), axis=-1).mean()
+    acc = np.argmax(y, axis=-1) == np.argmax(z, axis=-1)
+    acc = acc.astype(np.float32).mean()
+    print cost, acc
+
+    weights = [w, b.reshape(-1)]
+    model.layers[1].set_weights(weights)
+
 
 if __name__ == '__main__':
     x_in = Input(shape=(dim_in,))
